@@ -1,5 +1,5 @@
 from fastmcp import FastMCP
-import sqlite3
+import aiosqlite
 from datetime import datetime
 from typing import List, Dict, Any
 import os
@@ -14,24 +14,20 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "expenses.db")
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
 
-def init_database():
+async def init_database():
     """Initialize the SQLite database with the expenses table."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            amount REAL NOT NULL,
-            category TEXT NOT NULL,
-            subcategory TEXT,
-            note TEXT
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                subcategory TEXT,
+                note TEXT
+            )
+        """)
+        await conn.commit()
 
 
 # MCP Resource: Expense Categories
@@ -69,7 +65,7 @@ def get_categories_resource() -> str:
 
 
 @mcp.tool()
-def add_expense(
+async def add_expense(
     date: str,
     amount: float,
     category: str,
@@ -98,18 +94,15 @@ def add_expense(
         formatted_date = parsed_date.strftime("%Y-%m-%d")
         
         # Connect to database
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Insert expense
-        cursor.execute("""
-            INSERT INTO expenses (date, amount, category, subcategory, note)
-            VALUES (?, ?, ?, ?, ?)
-        """, (formatted_date, amount, category, subcategory, note))
-        
-        expense_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
+        async with aiosqlite.connect(DB_PATH) as conn:
+            # Insert expense
+            cursor = await conn.execute("""
+                INSERT INTO expenses (date, amount, category, subcategory, note)
+                VALUES (?, ?, ?, ?, ?)
+            """, (formatted_date, amount, category, subcategory, note))
+            
+            expense_id = cursor.lastrowid
+            await conn.commit()
         
         return f"✅ Expense added successfully!\nID: {expense_id}\nDate: {formatted_date}\nAmount: ${amount:.2f}\nCategory: {category}" + (f"\nSubcategory: {subcategory}" if subcategory else "") + (f"\nNote: {note}" if note else "")
     
@@ -120,7 +113,7 @@ def add_expense(
 
 
 @mcp.tool()
-def list_expenses(
+async def list_expenses(
     limit: int = 10,
     category: str = "",
     date_range: str = "",
@@ -144,9 +137,6 @@ def list_expenses(
     """
     try:
         from datetime import timedelta
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
         
         # Parse date_range if provided
         parsed_start = None
@@ -227,9 +217,9 @@ def list_expenses(
             query += " LIMIT ?"
             params.append(limit)
         
-        cursor.execute(query, params)
-        expenses = cursor.fetchall()
-        conn.close()
+        async with aiosqlite.connect(DB_PATH) as conn:
+            cursor = await conn.execute(query, params)
+            expenses = await cursor.fetchall()
         
         if not expenses:
             return "📭 No expenses found matching the criteria."
@@ -269,7 +259,7 @@ def list_expenses(
 
 
 @mcp.tool()
-def update_expense(
+async def update_expense(
     expense_id: int,
     date: str = "",
     amount: float = 0,
@@ -294,62 +284,57 @@ def update_expense(
         Confirmation message with updated expense details, or error if expense doesn't exist
     """
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # First check if the expense exists
-        cursor.execute("SELECT id, date, amount, category, subcategory, note FROM expenses WHERE id = ?", (expense_id,))
-        expense = cursor.fetchone()
-        
-        if not expense:
-            conn.close()
-            return f"❌ Error: No expense found with ID {expense_id}"
-        
-        # Get current values
-        old_id, old_date, old_amount, old_category, old_subcategory, old_note = expense
-        
-        # Build update query for fields that are provided
-        updates = []
-        params = []
-        
-        if date:
-            # Parse date flexibly
-            parsed_date = parser.parse(date, fuzzy=True)
-            formatted_date = parsed_date.strftime("%Y-%m-%d")
-            updates.append("date = ?")
-            params.append(formatted_date)
-        
-        if amount > 0:
-            updates.append("amount = ?")
-            params.append(amount)
-        
-        if category:
-            updates.append("category = ?")
-            params.append(category)
-        
-        if subcategory is not None and subcategory != "":
-            updates.append("subcategory = ?")
-            params.append(subcategory)
-        
-        if note is not None and note != "":
-            updates.append("note = ?")
-            params.append(note)
-        
-        # Check if there's anything to update
-        if not updates:
-            conn.close()
-            return "⚠️ No fields provided to update. Please specify at least one field to change."
-        
-        # Execute update
-        params.append(expense_id)
-        query = f"UPDATE expenses SET {', '.join(updates)} WHERE id = ?"
-        cursor.execute(query, params)
-        conn.commit()
-        
-        # Fetch updated expense
-        cursor.execute("SELECT id, date, amount, category, subcategory, note FROM expenses WHERE id = ?", (expense_id,))
-        updated = cursor.fetchone()
-        conn.close()
+        async with aiosqlite.connect(DB_PATH) as conn:
+            # First check if the expense exists
+            cursor = await conn.execute("SELECT id, date, amount, category, subcategory, note FROM expenses WHERE id = ?", (expense_id,))
+            expense = await cursor.fetchone()
+            
+            if not expense:
+                return f"❌ Error: No expense found with ID {expense_id}"
+            
+            # Get current values
+            old_id, old_date, old_amount, old_category, old_subcategory, old_note = expense
+            
+            # Build update query for fields that are provided
+            updates = []
+            params = []
+            
+            if date:
+                # Parse date flexibly
+                parsed_date = parser.parse(date, fuzzy=True)
+                formatted_date = parsed_date.strftime("%Y-%m-%d")
+                updates.append("date = ?")
+                params.append(formatted_date)
+            
+            if amount > 0:
+                updates.append("amount = ?")
+                params.append(amount)
+            
+            if category:
+                updates.append("category = ?")
+                params.append(category)
+            
+            if subcategory is not None and subcategory != "":
+                updates.append("subcategory = ?")
+                params.append(subcategory)
+            
+            if note is not None and note != "":
+                updates.append("note = ?")
+                params.append(note)
+            
+            # Check if there's anything to update
+            if not updates:
+                return "⚠️ No fields provided to update. Please specify at least one field to change."
+            
+            # Execute update
+            params.append(expense_id)
+            query = f"UPDATE expenses SET {', '.join(updates)} WHERE id = ?"
+            await conn.execute(query, params)
+            await conn.commit()
+            
+            # Fetch updated expense
+            cursor = await conn.execute("SELECT id, date, amount, category, subcategory, note FROM expenses WHERE id = ?", (expense_id,))
+            updated = await cursor.fetchone()
         
         # Format output
         upd_id, upd_date, upd_amount, upd_category, upd_subcategory, upd_note = updated
@@ -373,7 +358,7 @@ def update_expense(
 
 
 @mcp.tool()
-def delete_expense(expense_id: int) -> str:
+async def delete_expense(expense_id: int) -> str:
     """Delete an expense from the tracker database.
     
     This tool permanently removes an expense record from the database.
@@ -387,21 +372,17 @@ def delete_expense(expense_id: int) -> str:
         Confirmation message if successful, or error message if the expense doesn't exist
     """
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # First check if the expense exists
-        cursor.execute("SELECT id, date, amount, category FROM expenses WHERE id = ?", (expense_id,))
-        expense = cursor.fetchone()
-        
-        if not expense:
-            conn.close()
-            return f"❌ Error: No expense found with ID {expense_id}"
-        
-        # Delete the expense
-        cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
-        conn.commit()
-        conn.close()
+        async with aiosqlite.connect(DB_PATH) as conn:
+            # First check if the expense exists
+            cursor = await conn.execute("SELECT id, date, amount, category FROM expenses WHERE id = ?", (expense_id,))
+            expense = await cursor.fetchone()
+            
+            if not expense:
+                return f"❌ Error: No expense found with ID {expense_id}"
+            
+            # Delete the expense
+            await conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+            await conn.commit()
         
         exp_id, date, amount, category = expense
         return f"✅ Expense deleted successfully!\nID: {exp_id}\nDate: {date}\nAmount: ${amount:.2f}\nCategory: {category}"
@@ -411,7 +392,7 @@ def delete_expense(expense_id: int) -> str:
 
 
 @mcp.tool()
-def summarize_expenses(
+async def summarize_expenses(
     date_range: str = "",
     start_date: str = "",
     end_date: str = "",
@@ -434,9 +415,6 @@ def summarize_expenses(
     """
     try:
         from datetime import timedelta
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
         
         # Parse date_range if provided (same logic as list_expenses)
         parsed_start = None
@@ -494,119 +472,118 @@ def summarize_expenses(
         if end_date and not parsed_end:
             parsed_end = parser.parse(end_date, fuzzy=True).strftime("%Y-%m-%d")
         
-        # Build query
-        if category:
-            # Show subcategory breakdown for specific category
-            query = """
-                SELECT subcategory, SUM(amount) as total, COUNT(*) as count
-                FROM expenses 
-                WHERE category = ?
-            """
-            params = [category]
-            
-            if parsed_start:
-                query += " AND date >= ?"
-                params.append(parsed_start)
-            
-            if parsed_end:
-                query += " AND date <= ?"
-                params.append(parsed_end)
-            
-            query += " GROUP BY subcategory ORDER BY total DESC"
-            
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            if not results:
-                conn.close()
-                return f"📭 No expenses found for category '{category}' in the specified period."
-            
-            # Calculate total for this category
-            grand_total = sum(row[1] for row in results)
-            
-            # Format output
-            date_info = ""
-            if date_range:
-                date_info = f" ({date_range})"
-            elif parsed_start and parsed_end:
-                date_info = f" ({parsed_start} to {parsed_end})"
-            elif parsed_start:
-                date_info = f" (from {parsed_start})"
-            elif parsed_end:
-                date_info = f" (up to {parsed_end})"
-            
-            result = f"📊 Summary for '{category}'{date_info}:\n\n"
-            
-            for subcat, total, count in results:
-                percentage = (total / grand_total * 100) if grand_total > 0 else 0
-                subcat_name = subcat if subcat else "(No subcategory)"
-                result += f"  {subcat_name}:\n"
-                result += f"    💰 ${total:.2f} ({percentage:.1f}%) - {count} expense(s)\n"
-                result += "-" * 50 + "\n"
-            
-            result += f"\n🔢 Total for '{category}': ${grand_total:.2f}"
-            
-        else:
-            # Show all categories
-            query = """
-                SELECT category, SUM(amount) as total, COUNT(*) as count
-                FROM expenses 
-                WHERE 1=1
-            """
-            params = []
-            
-            if parsed_start:
-                query += " AND date >= ?"
-                params.append(parsed_start)
-            
-            if parsed_end:
-                query += " AND date <= ?"
-                params.append(parsed_end)
-            
-            query += " GROUP BY category ORDER BY total DESC"
-            
-            cursor.execute(query, params)
-            results = cursor.fetchall()
-            
-            if not results:
-                conn.close()
-                return "📭 No expenses found in the specified period."
-            
-            # Calculate grand total
-            grand_total = sum(row[1] for row in results)
-            
-            # Format output
-            date_info = ""
-            if date_range:
-                date_info = f" ({date_range})"
-            elif parsed_start and parsed_end:
-                date_info = f" ({parsed_start} to {parsed_end})"
-            elif parsed_start:
-                date_info = f" (from {parsed_start})"
-            elif parsed_end:
-                date_info = f" (up to {parsed_end})"
-            
-            result = f"📊 Expense Summary by Category{date_info}:\n\n"
-            
-            for cat, total, count in results:
-                percentage = (total / grand_total * 100) if grand_total > 0 else 0
-                result += f"{cat}:\n"
-                result += f"  💰 ${total:.2f} ({percentage:.1f}%) - {count} expense(s)\n"
-                result += "-" * 50 + "\n"
-            
-            result += f"\n🔢 Grand Total: ${grand_total:.2f}"
+        async with aiosqlite.connect(DB_PATH) as conn:
+            # Build query
+            if category:
+                # Show subcategory breakdown for specific category
+                query = """
+                    SELECT subcategory, SUM(amount) as total, COUNT(*) as count
+                    FROM expenses 
+                    WHERE category = ?
+                """
+                params = [category]
+                
+                if parsed_start:
+                    query += " AND date >= ?"
+                    params.append(parsed_start)
+                
+                if parsed_end:
+                    query += " AND date <= ?"
+                    params.append(parsed_end)
+                
+                query += " GROUP BY subcategory ORDER BY total DESC"
+                
+                cursor = await conn.execute(query, params)
+                results = await cursor.fetchall()
+                
+                if not results:
+                    return f"📭 No expenses found for category '{category}' in the specified period."
+                
+                # Calculate total for this category
+                grand_total = sum(row[1] for row in results)
+                
+                # Format output
+                date_info = ""
+                if date_range:
+                    date_info = f" ({date_range})"
+                elif parsed_start and parsed_end:
+                    date_info = f" ({parsed_start} to {parsed_end})"
+                elif parsed_start:
+                    date_info = f" (from {parsed_start})"
+                elif parsed_end:
+                    date_info = f" (up to {parsed_end})"
+                
+                result = f"📊 Summary for '{category}'{date_info}:\n\n"
+                
+                for subcat, total, count in results:
+                    percentage = (total / grand_total * 100) if grand_total > 0 else 0
+                    subcat_name = subcat if subcat else "(No subcategory)"
+                    result += f"  {subcat_name}:\n"
+                    result += f"    💰 ${total:.2f} ({percentage:.1f}%) - {count} expense(s)\n"
+                    result += "-" * 50 + "\n"
+                
+                result += f"\n🔢 Total for '{category}': ${grand_total:.2f}"
+                
+            else:
+                # Show all categories
+                query = """
+                    SELECT category, SUM(amount) as total, COUNT(*) as count
+                    FROM expenses 
+                    WHERE 1=1
+                """
+                params = []
+                
+                if parsed_start:
+                    query += " AND date >= ?"
+                    params.append(parsed_start)
+                
+                if parsed_end:
+                    query += " AND date <= ?"
+                    params.append(parsed_end)
+                
+                query += " GROUP BY category ORDER BY total DESC"
+                
+                cursor = await conn.execute(query, params)
+                results = await cursor.fetchall()
+                
+                if not results:
+                    return "📭 No expenses found in the specified period."
+                
+                # Calculate grand total
+                grand_total = sum(row[1] for row in results)
+                
+                # Format output
+                date_info = ""
+                if date_range:
+                    date_info = f" ({date_range})"
+                elif parsed_start and parsed_end:
+                    date_info = f" ({parsed_start} to {parsed_end})"
+                elif parsed_start:
+                    date_info = f" (from {parsed_start})"
+                elif parsed_end:
+                    date_info = f" (up to {parsed_end})"
+                
+                result = f"📊 Expense Summary by Category{date_info}:\n\n"
+                
+                for cat, total, count in results:
+                    percentage = (total / grand_total * 100) if grand_total > 0 else 0
+                    result += f"{cat}:\n"
+                    result += f"  💰 ${total:.2f} ({percentage:.1f}%) - {count} expense(s)\n"
+                    result += "-" * 50 + "\n"
+                
+                result += f"\n🔢 Grand Total: ${grand_total:.2f}"
         
-        conn.close()
         return result
     
     except Exception as e:
         return f"❌ Error summarizing expenses: {str(e)}"
 
 
-# Initialize database on startup
-init_database()
-
-
 if __name__ == "__main__":
+    import asyncio
+    
+    # Initialize database on startup
+    asyncio.run(init_database())
+    
     # Run the server as a remote MCP server with SSE transport
     mcp.run(transport="sse", host="0.0.0.0", port=8000)

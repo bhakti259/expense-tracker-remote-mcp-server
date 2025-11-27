@@ -129,7 +129,15 @@ CREATE TABLE expenses (
 ## Dependencies
 
 - fastmcp>=2.13.1
-- python-dateutil (for flexible date parsing)
+- aiosqlite>=0.20.0 (async SQLite database operations)
+- python-dateutil>=2.8.2 (flexible date parsing)
+
+## Technical Details
+
+- Uses `aiosqlite` for asynchronous database operations
+- All database operations are non-blocking
+- SQLite database for persistent local storage
+- Natural language date parsing with `python-dateutil`
 
 ## License
 
