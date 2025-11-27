@@ -1,11 +1,40 @@
-# MCP Calculator Server
+# Expense Tracker Remote MCP Server
 
-A remote Model Context Protocol (MCP) server with a calculator tool using SSE transport.
+A comprehensive expense tracking system built as a Model Context Protocol (MCP) server with SSE transport. Track, manage, and analyze your expenses with natural language date parsing and flexible categorization.
 
 ## Features
 
-- **add_numbers**: A tool that adds two numbers together
-- Runs as a remote server accessible over HTTP
+### 🔧 Tools
+
+- **add_expense** - Add a new expense with flexible date parsing (supports "today", "yesterday", "Nov 27", etc.)
+- **list_expenses** - List expenses with filtering by category, date range, and limit
+- **update_expense** - Update any field of an existing expense
+- **delete_expense** - Remove an expense from the database
+- **summarize_expenses** - Get expense summaries by category with totals and percentages
+
+### 📋 Resources
+
+- **expense://categories** - Access predefined expense categories and subcategories
+
+### 🎯 Key Capabilities
+
+- Natural language date parsing ("today", "last week", "last 30 days", etc.)
+- 20 predefined expense categories with detailed subcategories
+- SQLite database for persistent storage
+- Flexible filtering by date ranges and categories
+- Comprehensive expense summaries with breakdowns
+
+## Categories
+
+The server includes 20 predefined categories:
+
+- Food, Transport, Housing, Utilities, Health
+- Education, Family/Kids, Entertainment, Shopping
+- Subscriptions, Personal Care, Gifts/Donations
+- Finance/Fees, Business, Travel, Home
+- Pet, Taxes, Investments, Miscellaneous
+
+Each category has specific subcategories for detailed tracking (see `categories.json`).
 
 ## Installation
 
@@ -13,15 +42,35 @@ A remote Model Context Protocol (MCP) server with a calculator tool using SSE tr
 pip install -e .
 ```
 
+Or with uv:
+
+```bash
+uv pip install -e .
+```
+
 ## Usage
 
-Run the server:
+### Run the Remote Server
 
 ```bash
 python main.py
 ```
 
+Or with uv:
+
+```bash
+uv run python main.py
+```
+
 The server will start on `http://0.0.0.0:8000` and be accessible via SSE transport.
+
+### Development Mode
+
+Test the server with MCP Inspector:
+
+```bash
+uv run fastmcp dev main.py
+```
 
 ## Connecting to the Server
 
@@ -30,6 +79,58 @@ Configure your MCP client to connect to:
 - **URL**: `http://localhost:8000/sse`
 - **Transport**: SSE (Server-Sent Events)
 
-## Example
+## Example Usage
 
-The server exposes an `add_numbers` tool that accepts two numbers (a and b) and returns their sum.
+### Add an Expense
+
+```python
+add_expense(
+    date="today",
+    amount=45.50,
+    category="food",
+    subcategory="groceries",
+    note="Weekly grocery shopping"
+)
+```
+
+### List Recent Expenses
+
+```python
+list_expenses(limit=10, date_range="last week")
+```
+
+### Get Summary
+
+```python
+summarize_expenses(date_range="this month")
+```
+
+### Update an Expense
+
+```python
+update_expense(expense_id=5, amount=50.00, note="Updated amount")
+```
+
+## Database
+
+Expenses are stored in `expenses.db` (SQLite) with the following schema:
+
+```sql
+CREATE TABLE expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    amount REAL NOT NULL,
+    category TEXT NOT NULL,
+    subcategory TEXT,
+    note TEXT
+)
+```
+
+## Dependencies
+
+- fastmcp>=2.13.1
+- python-dateutil (for flexible date parsing)
+
+## License
+
+MIT
