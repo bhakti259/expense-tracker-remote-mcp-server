@@ -113,7 +113,15 @@ update_expense(expense_id=5, amount=50.00, note="Updated amount")
 
 ## Database
 
-Expenses are stored in `expenses.db` (SQLite) with the following schema:
+### Database (FastMCP Cloud note)
+
+On FastMCP Cloud the app runs on ephemeral storage. The server is configured to use a writable temp path when deployed on FastMCP Cloud:
+
+- Database path used on FastMCP Cloud: `/tmp/expense_tracker.db`
+
+The server will automatically initialize the database on startup (or on first tool call) using the included initialization logic.
+
+Expenses are stored in SQLite with the following schema:
 
 ```sql
 CREATE TABLE expenses (
