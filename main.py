@@ -13,21 +13,32 @@ mcp = FastMCP("Expense Tracker Server")
 DB_PATH = "/tmp/expense_tracker.db"
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
+# Track if database is initialized
+_db_initialized = False
+
+
+async def ensure_database():
+    """Ensure the SQLite database and table exist. Called before every operation."""
+    global _db_initialized
+    if not _db_initialized:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL,
+                    subcategory TEXT,
+                    note TEXT
+                )
+            """)
+            await conn.commit()
+        _db_initialized = True
+
 
 async def init_database():
     """Initialize the SQLite database with the expenses table."""
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL,
-                subcategory TEXT,
-                note TEXT
-            )
-        """)
-        await conn.commit()
+    await ensure_database()
 
 
 # MCP Resource: Expense Categories
@@ -89,6 +100,9 @@ async def add_expense(
         Confirmation message with the expense ID and details
     """
     try:
+        # Ensure database exists
+        await ensure_database()
+        
         # Parse date flexibly using dateutil
         parsed_date = parser.parse(date, fuzzy=True)
         formatted_date = parsed_date.strftime("%Y-%m-%d")
@@ -136,6 +150,9 @@ async def list_expenses(
         Formatted list of expenses with all details, or a message if no expenses found
     """
     try:
+        # Ensure database exists
+        await ensure_database()
+        
         from datetime import timedelta
         
         # Parse date_range if provided
@@ -284,6 +301,9 @@ async def update_expense(
         Confirmation message with updated expense details, or error if expense doesn't exist
     """
     try:
+        # Ensure database exists
+        await ensure_database()
+        
         async with aiosqlite.connect(DB_PATH) as conn:
             # First check if the expense exists
             cursor = await conn.execute("SELECT id, date, amount, category, subcategory, note FROM expenses WHERE id = ?", (expense_id,))
@@ -372,6 +392,9 @@ async def delete_expense(expense_id: int) -> str:
         Confirmation message if successful, or error message if the expense doesn't exist
     """
     try:
+        # Ensure database exists
+        await ensure_database()
+        
         async with aiosqlite.connect(DB_PATH) as conn:
             # First check if the expense exists
             cursor = await conn.execute("SELECT id, date, amount, category FROM expenses WHERE id = ?", (expense_id,))
@@ -414,6 +437,9 @@ async def summarize_expenses(
         Summary of expenses by category with totals and percentages
     """
     try:
+        # Ensure database exists
+        await ensure_database()
+        
         from datetime import timedelta
         
         # Parse date_range if provided (same logic as list_expenses)
