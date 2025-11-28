@@ -9,8 +9,8 @@ import json
 # Create a FastMCP server instance
 mcp = FastMCP("Expense Tracker Server")
 
-# Database path
-DB_PATH = os.path.join(os.path.dirname(__file__), "expenses.db")
+# Database path - Use /tmp for FastMCP Cloud compatibility (ephemeral storage)
+DB_PATH = "/tmp/expense_tracker.db"
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
 
